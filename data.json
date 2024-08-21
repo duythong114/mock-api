@@ -1,0 +1,15 @@
+{
+  "users": [
+    {
+      "id": 1,
+      "fullName": "Bang",
+      "email": "bang@gmail.com",
+      "phone": "phone_caf97870c826",
+      "gender": "gender_0579172c757a",
+      "dob": "2024-08-16T15:08:23",
+      "address": "address_a599d47560f4",
+      "password": "$2b$10$bx7S7G/K1NNhjOlsJGr28u6Z2KfzO9k7RDK5/OMjT6pXQx5/jNsCW",
+      "roleId": 3
+    }
+  ]
+}

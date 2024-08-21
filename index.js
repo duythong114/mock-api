@@ -3,12 +3,12 @@ const bodyParser = require('body-parser');
 const cors = require('cors');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const fs = require('fs').promises;
 
 const app = express();
 app.use(bodyParser.json());
 app.use(cors());
 
-const users = [];
 const secretKey = 'your_secret_key'; // Nên lưu trữ trong biến môi trường
 
 // Utility function to generate a mock token
@@ -16,37 +16,52 @@ function generateToken(user) {
     return jwt.sign({ id: user.id }, secretKey, { expiresIn: '1h' });
 }
 
-// Middleware để xác thực token
+// Middleware to authenticate token
 function authenticateToken(req, res, next) {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
 
-    if (token == null) return res.sendStatus(401); // Nếu không có token
+    if (token == null) return res.sendStatus(401);
 
-    jwt.verify(token, secretKey, (err, user) => {
-        if (err) return res.sendStatus(403); // Token không hợp lệ
-        req.user = users.find(u => u.id === user.id); // Đính kèm thông tin người dùng vào request
-        next(); // Token hợp lệ, tiếp tục xử lý request
+    jwt.verify(token, secretKey, async (err, user) => {
+        if (err) return res.sendStatus(403);
+
+        const usersData = await readData();
+        req.user = usersData.users.find(u => u.id === user.id);
+        next();
     });
 }
 
-// API đăng ký
+// Helper function to read data from data.json
+async function readData() {
+    const data = await fs.readFile('./data.json', 'utf-8');
+    return JSON.parse(data);
+}
+
+// Helper function to write data to data.json
+async function writeData(data) {
+    await fs.writeFile('./data.json', JSON.stringify(data, null, 2));
+}
+
+// API to register a user
 app.post('/api/user/register', async (req, res) => {
     const { fullName, email, phone, gender, dob, address, password } = req.body;
 
     if (!fullName || !email || !phone || !gender || !dob || !address || !password) {
         return res.status(400).json({
             status: 400,
-            message: "Tất cả các trường đều là bắt buộc.",
+            message: "All fields are required.",
             data: null
         });
     }
 
-    const existingUser = users.find(user => user.email === email);
+    const usersData = await readData();
+    const existingUser = usersData.users.find(user => user.email === email);
+
     if (existingUser) {
         return res.status(400).json({
             status: 400,
-            message: "Email này đã được đăng ký.",
+            message: "This email is already registered.",
             data: null
         });
     }
@@ -54,7 +69,7 @@ app.post('/api/user/register', async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const newUser = {
-        id: users.length + 1,
+        id: usersData.users.length + 1,
         fullName,
         email,
         phone,
@@ -65,11 +80,12 @@ app.post('/api/user/register', async (req, res) => {
         roleId: 3,
     };
 
-    users.push(newUser);
+    usersData.users.push(newUser);
+    await writeData(usersData);
 
     res.status(201).json({
         status: 201,
-        message: "Đăng ký thành công.",
+        message: "User registered successfully.",
         data: {
             id: newUser.id,
             fullName: newUser.fullName,
@@ -83,42 +99,53 @@ app.post('/api/user/register', async (req, res) => {
     });
 });
 
-// API đăng nhập
+// API to login a user
 app.get('/api/user/login', async (req, res) => {
     const { email, password } = req.query;
 
     if (!email || !password) {
         return res.status(400).json({
             status: 400,
-            message: "Email và mật khẩu là bắt buộc.",
+            message: "Email and password are required.",
             data: null
         });
     }
 
-    const user = users.find(user => user.email === email);
+    const usersData = await readData();
+    const user = usersData.users.find(user => user.email === email);
+
     if (!user || !await bcrypt.compare(password, user.password)) {
         return res.status(401).json({
             status: 401,
-            message: "Email hoặc mật khẩu không hợp lệ.",
+            message: "Invalid email or password.",
             data: null
         });
     }
 
-    const token = generateToken(user); // Tạo token mới khi đăng nhập
+    const token = generateToken(user);
 
     res.status(200).json({
         status: 200,
-        message: "Đăng nhập thành công.",
+        message: "Login successful.",
         data: token
     });
 });
 
-// API lấy thông tin người dùng
+// API to get user info
 app.get('/api/user/get-user', authenticateToken, (req, res) => {
-    const user = req.user; // Lấy thông tin người dùng từ request
+    const user = req.user;
+
+    if (!user) {
+        return res.status(404).json({
+            status: 404,
+            message: "User not found.",
+            data: null
+        });
+    }
+
     res.status(200).json({
         status: 200,
-        message: "Lấy thông tin người dùng thành công.",
+        message: "User info retrieved successfully.",
         data: {
             id: user.id,
             fullName: user.fullName,
